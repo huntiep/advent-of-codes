@@ -1,0 +1,415 @@
+(include! "syscalls.sasm")
+
+start
+    (jal x1 malloc-init)
+
+    (lw x10 x2)
+    (addi x11 x0 2)
+    (bne x10 x11 error-argc)
+
+    ;; Open input file
+    ;; openat(AT_FDCWD, input-name, O_RDONLY, 0)
+    (addi x10 x0 AT_FDCWD)
+    ;; argv[1]
+    (ld x11 (+ x2 16))
+    (add x12 x0 x0)
+    (add x13 x0 x0)
+    (addi x17 x0 SYS_OPENAT)
+    (ecall)
+    (blt x10 x0 error-open)
+
+    ;; Read input file to buffer
+    ;; mmap(NULL, 64k, PROT_READ, MAP_PRIVATE, fd, 0)
+    (add x14 x0 x10)
+    (add x10 x0 x0)
+    (addi x11 x0 1)
+    (slli x11 x11 16)
+    (addi x12 x0 1)
+    (addi x13 x0 2)
+    (add x15 x0 x0)
+    (addi x17 x0 SYS_MMAP)
+    (ecall)
+    (blt x10 x0 error-read-input)
+    (beq x10 x0 error-read-input)
+
+    (add x31 x0 x10)
+
+    ;; close(fd)
+    (add x10 x0 x14)
+    (addi x17 x0 SYS_CLOSE)
+    (ecall)
+
+    (add x10 x0 x31)
+    (subi x2 x2 8)
+    (sd x2 x10)
+
+    (jal x1 p1)
+
+    (ld x10 x2)
+    (addi x2 x2 8)
+
+    (jal x1 p2)
+
+    ;; exit(0)
+    (add x10 x0 x0)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+
+    p2
+        (add x5 x0 x0)
+        (subi x28 x0 1)
+        (subi x29 x0 1)
+        (addi x30 x0 10)
+
+        p2-loop
+            (lb x6 x10)
+            (addi x10 x10 1)
+            (beq x6 x0 p2-done)
+            (subi x7 x6 #'\n')
+            (beq x7 x0 p2-loop-line)
+            ;; If is digit
+            ;; ':' = '0' + 1
+            (subi x7 x6 #':')
+            (bge x7 x0 p2-loop-try-word)
+            (subi x7 x6 #'0')
+            (blt x7 x0 p2-loop)
+            (beq x28 x29 p2-loop-first)
+            (add x28 x0 x7)
+            (jal x0 p2-loop)
+
+            ;; if is char
+            p2-loop-try-word
+                (subi x7 x6 #'o')
+                (beq x7 x0 p2-s11)
+                (subi x7 x6 #'t')
+                (beq x7 x0 p2-s2/3)
+                (subi x7 x6 #'f')
+                (beq x7 x0 p2-s4/5)
+                (subi x7 x6 #'s')
+                (beq x7 x0 p2-s6/7)
+                (subi x7 x6 #'e')
+                (beq x7 x0 p2-s81)
+                (subi x7 x6 #'n')
+                (beq x7 x0 p2-s91)
+                (jal x0 p2-loop)
+
+            ;; State machine
+            ;; "one"
+            p2-s11
+                (lb x6 x10)
+                (subi x7 x6 #'n')
+                (beq x7 x0 p2-s12)
+                (jal x0 p2-loop)
+            p2-s12
+                (lb x6 (+ x10 1))
+                (subi x7 x6 #'e')
+                (beq x7 x0 p2-s1t)
+                (jal x0 p2-loop)
+            p2-s1t
+                (addi x10 x10 1)
+                (addi x7 x0 1)
+                (beq x28 x29 p2-loop-first)
+                (add x28 x0 x7)
+                (jal x0 p2-loop)
+            ;; "t"
+            p2-s2/3
+                (lb x6 x10)
+                (subi x7 x6 #'w')
+                (beq x7 x0 p2-s21)
+                (subi x7 x6 #'h')
+                (beq x7 x0 p2-s31)
+                (jal x0 p2-loop)
+            ;; "two"
+            p2-s21
+                (lb x6 (+ x10 1))
+                (subi x7 x6 #'o')
+                (beq x7 x0 p2-s2t)
+                (jal x0 p2-loop)
+            p2-s2t
+                (addi x10 x10 1)
+                (addi x7 x0 2)
+                (beq x28 x29 p2-loop-first)
+                (add x28 x0 x7)
+                (jal x0 p2-loop)
+            ;; "three"
+            p2-s31
+                (lb x6 (+ x10 1))
+                (subi x7 x6 #'r')
+                (beq x7 x0 p2-s32)
+                (jal x0 p2-loop)
+            p2-s32
+                (lb x6 (+ x10 2))
+                (subi x7 x6 #'e')
+                (beq x7 x0 p2-s33)
+                (jal x0 p2-loop)
+            p2-s33
+                (lb x6 (+ x10 3))
+                (subi x7 x6 #'e')
+                (beq x7 x0 p2-s3t)
+                (jal x0 p2-loop)
+            p2-s3t
+                (addi x10 x10 3)
+                (addi x7 x0 3)
+                (beq x28 x29 p2-loop-first)
+                (add x28 x0 x7)
+                (jal x0 p2-loop)
+            ;; "f"
+            p2-s4/5
+                (lb x6 x10)
+                (subi x7 x6 #'o')
+                (beq x7 x0 p2-s41)
+                (subi x7 x6 #'i')
+                (beq x7 x0 p2-s51)
+                (jal x0 p2-loop)
+            ;; "four"
+            p2-s41
+                (lb x6 (+ x10 1))
+                (subi x7 x6 #'u')
+                (beq x7 x0 p2-s42)
+                (jal x0 p2-loop)
+            p2-s42
+                (lb x6 (+ x10 2))
+                (subi x7 x6 #'r')
+                (beq x7 x0 p2-s4t)
+                (jal x0 p2-loop)
+            p2-s4t
+                (addi x10 x10 3)
+                (addi x7 x0 4)
+                (beq x28 x29 p2-loop-first)
+                (add x28 x0 x7)
+                (jal x0 p2-loop)
+            ;; "five"
+            p2-s51
+                (lb x6 (+ x10 1))
+                (subi x7 x6 #'v')
+                (beq x7 x0 p2-s52)
+                (jal x0 p2-loop)
+            p2-s52
+                (lb x6 (+ x10 2))
+                (subi x7 x6 #'e')
+                (beq x7 x0 p2-s5t)
+                (jal x0 p2-loop)
+            p2-s5t
+                (addi x10 x10 2)
+                (addi x7 x0 5)
+                (beq x28 x29 p2-loop-first)
+                (add x28 x0 x7)
+                (jal x0 p2-loop)
+            ;; "s"
+            p2-s6/7
+                (lb x6 x10)
+                (subi x7 x6 #'i')
+                (beq x7 x0 p2-s61)
+                (subi x7 x6 #'e')
+                (beq x7 x0 p2-s71)
+                (jal x0 p2-loop)
+            ;; "six"
+            p2-s61
+                (lb x6 (+ x10 1))
+                (subi x7 x6 #'x')
+                (beq x7 x0 p2-s6t)
+                (jal x0 p2-loop)
+            p2-s6t
+                (addi x10 x10 2)
+                (addi x7 x0 6)
+                (beq x28 x29 p2-loop-first)
+                (add x28 x0 x7)
+                (jal x0 p2-loop)
+            ;; "seven"
+            p2-s71
+                (lb x6 (+ x10 1))
+                (subi x7 x6 #'v')
+                (beq x7 x0 p2-s72)
+                (jal x0 p2-loop)
+            p2-s72
+                (lb x6 (+ x10 2))
+                (subi x7 x6 #'e')
+                (beq x7 x0 p2-s73)
+                (jal x0 p2-loop)
+            p2-s73
+                (lb x6 (+ x10 3))
+                (subi x7 x6 #'n')
+                (beq x7 x0 p2-s7t)
+                (jal x0 p2-loop)
+            p2-s7t
+                (addi x10 x10 3)
+                (addi x7 x0 7)
+                (beq x28 x29 p2-loop-first)
+                (add x28 x0 x7)
+                (jal x0 p2-loop)
+            ;; "eight"
+            p2-s81
+                (lb x6 x10)
+                (subi x7 x6 #'i')
+                (beq x7 x0 p2-s82)
+                (jal x0 p2-loop)
+            p2-s82
+                (lb x6 (+ x10 1))
+                (subi x7 x6 #'g')
+                (beq x7 x0 p2-s83)
+                (jal x0 p2-loop)
+            p2-s83
+                (lb x6 (+ x10 2))
+                (subi x7 x6 #'h')
+                (beq x7 x0 p2-s84)
+                (jal x0 p2-loop)
+            p2-s84
+                (lb x6 (+ x10 3))
+                (subi x7 x6 #'t')
+                (beq x7 x0 p2-s8t)
+                (jal x0 p2-loop)
+            p2-s8t
+                (addi x10 x10 3)
+                (addi x7 x0 8)
+                (beq x28 x29 p2-loop-first)
+                (add x28 x0 x7)
+                (jal x0 p2-loop)
+            ;; "nine"
+            p2-s91
+                (lb x6 x10)
+                (subi x7 x6 #'i')
+                (beq x7 x0 p2-s92)
+                (jal x0 p2-loop)
+            p2-s92
+                (lb x6 (+ x10 1))
+                (subi x7 x6 #'n')
+                (beq x7 x0 p2-s93)
+                (jal x0 p2-loop)
+            p2-s93
+                (lb x6 (+ x10 2))
+                (subi x7 x6 #'e')
+                (beq x7 x0 p2-s9t)
+                (jal x0 p2-loop)
+            p2-s9t
+                (addi x10 x10 2)
+                (addi x7 x0 9)
+                (beq x28 x29 p2-loop-first)
+                (add x28 x0 x7)
+                (jal x0 p2-loop)
+
+        p2-loop-first
+            (mul x28 x7 x30)
+            (add x5 x5 x28)
+            (add x28 x0 x7)
+            (jal x0 p2-loop)
+        p2-loop-line
+            (add x5 x5 x28)
+            (subi x28 x0 1)
+            (jal x0 p2-loop)
+
+        p2-done
+            (subi x2 x2 8)
+            (sd x2 x1)
+
+            (add x10 x0 x5)
+            (jal x1 write-uint)
+
+            (ld x1 x2)
+            (addi x2 x2 8)
+            (jalr x0 x1)
+
+    p1
+        (add x5 x0 x0)
+        (subi x28 x0 1)
+        (subi x29 x0 1)
+        (addi x30 x0 10)
+
+        p1-loop
+            (lb x6 x10)
+            (addi x10 x10 1)
+            (beq x6 x0 p1-done)
+            (subi x7 x6 #'\n')
+            (beq x7 x0 p1-loop-line)
+            ;; ':' = '0' + 1
+            (subi x7 x6 #':')
+            (bge x7 x0 p1-loop)
+            (subi x7 x6 #'0')
+            (blt x7 x0 p1-loop)
+            (beq x28 x29 p1-loop-first)
+            (add x28 x0 x7)
+            (jal x0 p1-loop)
+        p1-loop-first
+            (mul x28 x7 x30)
+            (add x5 x5 x28)
+            (add x28 x0 x7)
+            (jal x0 p1-loop)
+        p1-loop-line
+            (add x5 x5 x28)
+            (subi x28 x0 1)
+            (jal x0 p1-loop)
+
+        p1-done
+            (subi x2 x2 8)
+            (sd x2 x1)
+
+            (add x10 x0 x5)
+            (jal x1 write-uint)
+
+            (ld x1 x2)
+            (addi x2 x2 8)
+            (jalr x0 x1)
+
+    ;; INPUT:
+    ;;  x10 - u64
+    write-uint
+        (subi x2 x2 16)
+        (sd x2 x1)
+        (sd (+ x2 8) x10)
+
+        (addi x10 x0 16)
+        (jal x1 malloc)
+        (add x11 x0 x10)
+
+        (ld x1 x2)
+        (ld x10 (+ x2 8))
+        (addi x2 x2 16)
+
+        (add x7 x0 x11)
+        (add x12 x0 x0)
+        (addi x5 x0 10)
+        itoa
+            (beq x10 x0 rev)
+            (rem x6 x10 x5)
+            (div x10 x10 x5)
+            (addi x6 x6 #'0')
+            (sb x7 x6)
+            (addi x7 x7 1)
+            (addi x12 x12 1)
+            (jal x0 itoa)
+        rev
+            (add x28 x0 x11)
+            (subi x29 x7 1)
+            rev-loop
+                (bge x28 x29 write)
+                (lb x30 x28)
+                (lb x31 x29)
+                (sb x28 x31)
+                (sb x29 x30)
+                (addi x28 x28 1)
+                (subi x29 x29 1)
+                (jal x0 rev-loop)
+        write
+        (addi x5 x0 #'\n')
+        (sb x7 x5)
+        (addi x12 x12 1)
+        ;; write(STDOUT, msg, len)
+        (addi x10 x0 STDOUT)
+        (addi x17 x0 SYS_WRITE)
+        (ecall)
+
+        (jalr x0 x1)
+
+error-argc
+    (addi x10 x0 -1)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+error-open
+    (addi x10 x0 -2)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+error-read-input
+    (addi x10 x0 -3)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+
+(include! "malloc.sasm")

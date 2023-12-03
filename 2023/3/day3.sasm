@@ -1,0 +1,441 @@
+(include! "syscalls.sasm")
+
+start
+    (jal x1 malloc-init)
+
+    (lw x10 x2)
+    (addi x11 x0 2)
+    (bne x10 x11 error-argc)
+
+    ;; Open input file
+    ;; openat(AT_FDCWD, input-name, O_RDONLY, 0)
+    (addi x10 x0 AT_FDCWD)
+    ;; argv[1]
+    (ld x11 (+ x2 16))
+    (add x12 x0 x0)
+    (add x13 x0 x0)
+    (addi x17 x0 SYS_OPENAT)
+    (ecall)
+    (blt x10 x0 error-open)
+
+    (add x30 x0 x10)
+    ;; lseek(fd, 0, SEEK_END)
+    (add x11 x0 x0)
+    (addi x12 x0 SEEK_END)
+    (addi x17 x0 SYS_LSEEK)
+    (ecall)
+    (add x26 x0 x10)
+    ;; lseek(fd, 0, SEEK_SET)
+    (add x10 x0 x30)
+    (add x11 x0 x0)
+    (addi x12 x0 SEEK_SET)
+    (addi x17 x0 SYS_LSEEK)
+    (ecall)
+
+    ;; Read input file to buffer
+    ;; mmap(NULL, 64k, PROT_READ, MAP_PRIVATE, fd, 0)
+    (add x14 x0 x30)
+    (add x10 x0 x0)
+    (addi x11 x0 1)
+    (slli x11 x11 25)
+    (addi x12 x0 1)
+    (addi x13 x0 2)
+    (add x15 x0 x0)
+    (addi x17 x0 SYS_MMAP)
+    (ecall)
+    (blt x10 x0 error-read-input)
+    (beq x10 x0 error-read-input)
+
+    (add x31 x0 x10)
+
+    ;; close(fd)
+    (add x10 x0 x14)
+    (addi x17 x0 SYS_CLOSE)
+    (ecall)
+
+    (add x10 x0 x31)
+    (add x26 x26 x10)
+    (subi x2 x2 8)
+    (sd x2 x10)
+
+    (jal x1 p1)
+
+    (ld x10 x2)
+    (addi x2 x2 8)
+
+    (jal x1 p2)
+
+    ;; exit(0)
+    (add x10 x0 x0)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+
+    p2
+        (subi x2 x2 16)
+        (sd (+ x2 8) x1)
+
+        (add x27 x0 x10)
+        (add x11 x0 x10)
+        p2-newline-loop
+            (lb x5 x11)
+            (addi x11 x11 1)
+            (subi x5 x5 #'\n')
+            (bne x5 x0 p2-newline-loop)
+        p2-newline-loop-after
+            ;; line length
+            (sub x21 x11 x10)
+        ;; sum
+        (add x20 x0 x0)
+        p2-loop
+            (lb x5 x10)
+            (beq x5 x0 p2-done)
+            (addi x10 x10 1)
+            (subi x6 x5 #'*')
+            (beq x6 x0 p2-loop-gear)
+            (jal x0 p2-loop)
+        p2-loop-gear
+            (sd x2 x10)
+            (subi x22 x10 1)
+            (add x24 x0 x0)
+            (add x25 x0 x0)
+            ;; W
+                (subi x5 x22 1)
+                (blt x5 x27 p2-E)
+                (jal x1 p2-is-digit)
+                (beq x10 x0 p2-E)
+                (jal x1 p2-gear)
+            ;; E
+            p2-E
+                (addi x5 x22 1)
+                (jal x1 p2-is-digit)
+                (beq x10 x0 p2-N)
+                (jal x1 p2-gear)
+            ;; N
+            p2-N
+                (sub x5 x22 x21)
+                (blt x5 x27 p2-S)
+                (jal x1 p2-is-digit)
+                (beq x10 x0 p2-NW)
+                (jal x0 p2-pre-S)
+            ;; NW
+            p2-NW
+                (sub x5 x22 x21)
+                (subi x5 x5 1)
+                (blt x5 x27 p2-NE)
+                (jal x1 p2-is-digit)
+                (beq x10 x0 p2-NE)
+                (jal x1 p2-gear)
+            ;; NE
+            p2-NE
+                (sub x5 x22 x21)
+                (addi x5 x5 1)
+                (blt x5 x27 p2-S)
+                (jal x1 p2-is-digit)
+                (beq x10 x0 p2-S)
+            p2-pre-S
+                (jal x1 p2-gear)
+            ;; S
+            p2-S
+                (add x5 x22 x21)
+                (bge x5 x26 p2-S-done)
+                (jal x1 p2-is-digit)
+                (beq x10 x0 p2-SW)
+                (jal x0 p2-post-S)
+            ;; SW
+            p2-SW
+                (add x5 x22 x21)
+                (subi x5 x5 1)
+                (jal x1 p2-is-digit)
+                (beq x10 x0 p2-SE)
+                (jal x1 p2-gear)
+            ;; SE
+            p2-SE
+                (add x5 x22 x21)
+                (addi x5 x5 1)
+                (bge x5 x26 p2-S-done)
+                (jal x1 p2-is-digit)
+                (bne x10 x0 p2-post-S)
+                (jal x0 p2-S-done)
+            p2-post-S
+                (jal x1 p2-gear)
+            p2-S-done
+                (ld x10 x2)
+                (beq x24 x0 p2-loop)
+                (beq x25 x0 p2-loop)
+                (mul x25 x24 x25)
+                (add x20 x20 x25)
+                (jal x0 p2-loop)
+        p2-gear
+            (beq x5 x27 p2-gear-convert)
+            (lb x6 (- x5 1))
+            (subi x7 x6 #':')
+            (bge x7 x0 p2-gear-convert)
+            (subi x7 x6 #'0')
+            (blt x7 x0 p2-gear-convert)
+            (subi x5 x5 1)
+            (jal x0 p2-gear)
+        p2-gear-convert
+            (subi x2 x2 8)
+            (sd x2 x1)
+            (add x10 x0 x5)
+            (jal x1 atou)
+            (beq x24 x0 p2-gear-convert-f)
+            (add x25 x0 x11)
+            (jal x0 p2-gear-convert-after)
+        p2-gear-convert-f
+            (add x24 x0 x11)
+        p2-gear-convert-after
+            (ld x1 x2)
+            (addi x2 x2 8)
+            (jalr x0 x1)
+
+        p2-is-digit
+            (lb x10 x5)
+            (subi x7 x10 #':')
+            (bge x7 x0 p2-is-digit-false)
+            (subi x7 x10 #'0')
+            (blt x7 x0 p2-is-digit-false)
+            (addi x10 x0 1)
+            (jalr x0 x1)
+        p2-is-digit-false
+            (add x10 x0 x0)
+            (jalr x0 x1)
+
+        p2-done
+        (add x10 x0 x20)
+        (jal x1 write-uint)
+        (ld x1 (+ x2 8))
+        (addi x2 x2 16)
+        (jalr x0 x1)
+
+
+    p1
+        (add x27 x0 x10)
+        (add x11 x0 x10)
+        p1-newline-loop
+            (lb x5 x11)
+            (addi x11 x11 1)
+            (subi x5 x5 #'\n')
+            (bne x5 x0 p1-newline-loop)
+        p1-newline-loop-after
+            ;; line length
+            (sub x21 x11 x10)
+        ;; sum
+        (add x20 x0 x0)
+        (subi x2 x2 16)
+        (sd (+ x2 8) x1)
+        p1-loop
+            (lb x5 x10)
+            (beq x5 x0 p1-done)
+            (addi x10 x10 1)
+            (subi x6 x5 #'#')
+            (beq x6 x0 p1-loop-symbol)
+            (subi x6 x5 #'$')
+            (beq x6 x0 p1-loop-symbol)
+            (subi x6 x5 #'%')
+            (beq x6 x0 p1-loop-symbol)
+            (subi x6 x5 #'&')
+            (beq x6 x0 p1-loop-symbol)
+            (subi x6 x5 #'*')
+            (beq x6 x0 p1-loop-symbol)
+            (subi x6 x5 #'+')
+            (beq x6 x0 p1-loop-symbol)
+            (subi x6 x5 #'-')
+            (beq x6 x0 p1-loop-symbol)
+            (subi x6 x5 #'/')
+            (beq x6 x0 p1-loop-symbol)
+            (subi x6 x5 #'=')
+            (beq x6 x0 p1-loop-symbol)
+            (subi x6 x5 #'@')
+            (beq x6 x0 p1-loop-symbol)
+            (jal x0 p1-loop)
+        p1-loop-symbol
+            (sd x2 x10)
+            (subi x22 x10 1)
+            ;; W
+                (subi x5 x22 1)
+                (blt x5 x27 p1-E)
+                (jal x1 p1-is-digit)
+                (beq x10 x0 p1-E)
+                (jal x1 p1-add-to-sum)
+            ;; E
+            p1-E
+                (addi x5 x22 1)
+                (jal x1 p1-is-digit)
+                (beq x10 x0 p1-N)
+                (jal x1 p1-add-to-sum)
+            ;; N
+            p1-N
+                (sub x5 x22 x21)
+                (blt x5 x27 p1-S)
+                (jal x1 p1-is-digit)
+                (beq x10 x0 p1-NW)
+                (jal x0 p1-pre-S)
+            ;; NW
+            p1-NW
+                (sub x5 x22 x21)
+                (subi x5 x5 1)
+                (blt x5 x27 p1-NE)
+                (jal x1 p1-is-digit)
+                (beq x10 x0 p1-NE)
+                (jal x1 p1-add-to-sum)
+            ;; NE
+            p1-NE
+                (sub x5 x22 x21)
+                (addi x5 x5 1)
+                (blt x5 x27 p1-S)
+                (jal x1 p1-is-digit)
+                (beq x10 x0 p1-S)
+            p1-pre-S
+                (jal x1 p1-add-to-sum)
+            ;; S
+            p1-S
+                (add x5 x22 x21)
+                (bge x5 x26 p1-S-done)
+                (jal x1 p1-is-digit)
+                (beq x10 x0 p1-SW)
+                (jal x0 p1-post-S)
+            ;; SW
+            p1-SW
+                (add x5 x22 x21)
+                (subi x5 x5 1)
+                (jal x1 p1-is-digit)
+                (beq x10 x0 p1-SE)
+                (jal x1 p1-add-to-sum)
+            ;; SE
+            p1-SE
+                (add x5 x22 x21)
+                (addi x5 x5 1)
+                (bge x5 x26 p1-S-done)
+                (jal x1 p1-is-digit)
+                (bne x10 x0 p1-post-S)
+            p1-S-done
+                (ld x10 x2)
+                (jal x0 p1-loop)
+            p1-post-S
+                (jal x1 p1-add-to-sum)
+                (ld x10 x2)
+                (jal x0 p1-loop)
+        p1-add-to-sum
+            (beq x5 x27 p1-add-to-sum-convert)
+            (lb x6 (- x5 1))
+            (subi x7 x6 #':')
+            (bge x7 x0 p1-add-to-sum-convert)
+            (subi x7 x6 #'0')
+            (blt x7 x0 p1-add-to-sum-convert)
+            (subi x5 x5 1)
+            (jal x0 p1-add-to-sum)
+        p1-add-to-sum-convert
+            (subi x2 x2 8)
+            (sd x2 x1)
+            (add x10 x0 x5)
+            (jal x1 atou)
+            (add x20 x20 x11)
+            (ld x1 x2)
+            (addi x2 x2 8)
+            (jalr x0 x1)
+
+        p1-is-digit
+            (lb x10 x5)
+            (subi x7 x10 #':')
+            (bge x7 x0 p1-is-digit-false)
+            (subi x7 x10 #'0')
+            (blt x7 x0 p1-is-digit-false)
+            (addi x10 x0 1)
+            (jalr x0 x1)
+        p1-is-digit-false
+            (add x10 x0 x0)
+            (jalr x0 x1)
+
+        p1-done
+        (add x10 x0 x20)
+        (jal x1 write-uint)
+        (ld x1 (+ x2 8))
+        (addi x2 x2 16)
+        (jalr x0 x1)
+
+    ;; INPUT:
+    ;;  x10 - char*
+    ;; OUTPUT:
+    ;;  x10 - char* : incremented to character after this uint
+    ;;  x11 - u64
+    atou
+        (add x11 x0 x0)
+        (addi x5 x0 10)
+        atou-loop
+            (lb x6 x10)
+            (subi x7 x6 #':')
+            (bge x7 x0 atou-done)
+            (subi x7 x6 #'0')
+            (blt x7 x0 atou-done)
+            (addi x10 x10 1)
+            (mul x11 x11 x5)
+            (add x11 x11 x7)
+            (jal x0 atou-loop)
+        atou-done
+            (jalr x0 x1)
+
+    ;; INPUT:
+    ;;  x10 - u64
+    write-uint
+        (subi x2 x2 16)
+        (sd x2 x1)
+        (sd (+ x2 8) x10)
+
+        (addi x10 x0 16)
+        (jal x1 malloc)
+        (add x11 x0 x10)
+
+        (ld x1 x2)
+        (ld x10 (+ x2 8))
+        (addi x2 x2 16)
+
+        (add x7 x0 x11)
+        (add x12 x0 x0)
+        (addi x5 x0 10)
+        itoa
+            (beq x10 x0 rev)
+            (rem x6 x10 x5)
+            (div x10 x10 x5)
+            (addi x6 x6 #'0')
+            (sb x7 x6)
+            (addi x7 x7 1)
+            (addi x12 x12 1)
+            (jal x0 itoa)
+        rev
+            (add x28 x0 x11)
+            (subi x29 x7 1)
+            rev-loop
+                (bge x28 x29 write)
+                (lb x30 x28)
+                (lb x31 x29)
+                (sb x28 x31)
+                (sb x29 x30)
+                (addi x28 x28 1)
+                (subi x29 x29 1)
+                (jal x0 rev-loop)
+        write
+        (addi x5 x0 #'\n')
+        (sb x7 x5)
+        (addi x12 x12 1)
+        ;; write(STDOUT, msg, len)
+        (addi x10 x0 STDOUT)
+        (addi x17 x0 SYS_WRITE)
+        (ecall)
+
+        (jalr x0 x1)
+
+error-argc
+    (addi x10 x0 -1)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+error-open
+    (addi x10 x0 -2)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+error-read-input
+    (addi x10 x0 -3)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+
+(include! "malloc.sasm")

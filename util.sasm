@@ -1,0 +1,97 @@
+;; INPUT:
+;;  x10 - char*
+;; OUTPUT:
+;;  x10 - char* : incremented to character after this uint
+;;  x11 - u64
+atou
+    (add x11 x0 x0)
+    (addi x5 x0 10)
+    atou-loop
+        (lb x6 x10)
+        (subi x7 x6 #':')
+        (bge x7 x0 atou-done)
+        (subi x7 x6 #'0')
+        (blt x7 x0 atou-done)
+        (addi x10 x10 1)
+        (mul x11 x11 x5)
+        (add x11 x11 x7)
+        (jal x0 atou-loop)
+    atou-done
+        (jalr x0 x1)
+
+;; INPUT:
+;;  x10 - i64
+write-int
+    (subi x2 x2 16)
+    (sd x2 x1)
+    (sd (+ x2 8) x10)
+
+    (addi x10 x0 16)
+    (jal x1 malloc)
+    (add x11 x0 x10)
+
+    (ld x1 x2)
+    (ld x10 (+ x2 8))
+    (addi x2 x2 16)
+
+    (beq x10 x0 write-int-zero)
+    (blt x10 x0 write-int-neg)
+
+    (add x7 x0 x11)
+    (add x17 x0 x11)
+    (add x12 x0 x0)
+    (addi x5 x0 10)
+    write-int-itoa
+        (beq x10 x0 write-int-rev)
+        (rem x6 x10 x5)
+        (div x10 x10 x5)
+        (addi x6 x6 #'0')
+        (sb x7 x6)
+        (addi x7 x7 1)
+        (addi x12 x12 1)
+        (jal x0 write-int-itoa)
+    write-int-rev
+        (add x28 x0 x17)
+        (subi x29 x7 1)
+        write-int-rev-loop
+            (bge x28 x29 write-int-write)
+            (lb x30 x28)
+            (lb x31 x29)
+            (sb x28 x31)
+            (sb x29 x30)
+            (addi x28 x28 1)
+            (subi x29 x29 1)
+            (jal x0 write-int-rev-loop)
+    write-int-write
+    (addi x5 x0 #'\n')
+    (sb x7 x5)
+    (addi x12 x12 1)
+    ;; write(STDOUT, msg, len)
+    (addi x10 x0 STDOUT)
+    (addi x17 x0 SYS_WRITE)
+    (ecall)
+    (subi x2 x2 8)
+    (sd x2 x1)
+    (add x10 x0 x11)
+    (jal x1 free)
+    (ld x1 x2)
+    (addi x2 x2 8)
+
+    (jalr x0 x1)
+
+    write-int-neg
+        (addi x5 x0 #'-')
+        (sb x11 x5)
+        (addi x7 x11 1)
+        (addi x17 x11 1)
+        (addi x12 x0 1)
+        (sub x10 x0 x10)
+        (addi x5 x0 10)
+        (jal x0 write-int-itoa)
+
+    write-int-zero
+        (addi x5 x0 #'0')
+        (sb x11 x5)
+        (addi x7 x11 1)
+        (addi x12 x0 1)
+        (jal x0 write-int-write)

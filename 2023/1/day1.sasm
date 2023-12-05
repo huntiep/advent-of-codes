@@ -23,7 +23,7 @@ start
     (add x14 x0 x10)
     (add x10 x0 x0)
     (addi x11 x0 1)
-    (slli x11 x11 16)
+    (slli x11 x11 25)
     (addi x12 x0 1)
     (addi x13 x0 2)
     (add x15 x0 x0)
@@ -302,7 +302,7 @@ start
             (sd x2 x1)
 
             (add x10 x0 x5)
-            (jal x1 write-uint)
+            (jal x1 write-int)
 
             (ld x1 x2)
             (addi x2 x2 8)
@@ -343,61 +343,11 @@ start
             (sd x2 x1)
 
             (add x10 x0 x5)
-            (jal x1 write-uint)
+            (jal x1 write-int)
 
             (ld x1 x2)
             (addi x2 x2 8)
             (jalr x0 x1)
-
-    ;; INPUT:
-    ;;  x10 - u64
-    write-uint
-        (subi x2 x2 16)
-        (sd x2 x1)
-        (sd (+ x2 8) x10)
-
-        (addi x10 x0 16)
-        (jal x1 malloc)
-        (add x11 x0 x10)
-
-        (ld x1 x2)
-        (ld x10 (+ x2 8))
-        (addi x2 x2 16)
-
-        (add x7 x0 x11)
-        (add x12 x0 x0)
-        (addi x5 x0 10)
-        itoa
-            (beq x10 x0 rev)
-            (rem x6 x10 x5)
-            (div x10 x10 x5)
-            (addi x6 x6 #'0')
-            (sb x7 x6)
-            (addi x7 x7 1)
-            (addi x12 x12 1)
-            (jal x0 itoa)
-        rev
-            (add x28 x0 x11)
-            (subi x29 x7 1)
-            rev-loop
-                (bge x28 x29 write)
-                (lb x30 x28)
-                (lb x31 x29)
-                (sb x28 x31)
-                (sb x29 x30)
-                (addi x28 x28 1)
-                (subi x29 x29 1)
-                (jal x0 rev-loop)
-        write
-        (addi x5 x0 #'\n')
-        (sb x7 x5)
-        (addi x12 x12 1)
-        ;; write(STDOUT, msg, len)
-        (addi x10 x0 STDOUT)
-        (addi x17 x0 SYS_WRITE)
-        (ecall)
-
-        (jalr x0 x1)
 
 error-argc
     (addi x10 x0 -1)
@@ -412,4 +362,5 @@ error-read-input
     (addi x17 x0 SYS_EXIT)
     (ecall)
 
+(include! "util.sasm")
 (include! "malloc.sasm")

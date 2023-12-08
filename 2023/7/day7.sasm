@@ -1,0 +1,432 @@
+(include! "syscalls.sasm")
+start
+    (jal x1 malloc-init)
+
+    (lw x10 x2)
+    (addi x11 x0 2)
+    (bne x10 x11 error-argc)
+
+    ;; Open input file
+    ;; openat(AT_FDCWD, input-name, O_RDONLY, 0)
+    (addi x10 x0 AT_FDCWD)
+    ;; argv[1]
+    (ld x11 (+ x2 16))
+    (add x12 x0 x0)
+    (add x13 x0 x0)
+    (addi x17 x0 SYS_OPENAT)
+    (ecall)
+    (blt x10 x0 error-open)
+
+    ;; Read input file to buffer
+    ;; mmap(NULL, 64k, PROT_READ, MAP_PRIVATE, fd, 0)
+    (add x14 x0 x10)
+    (add x10 x0 x0)
+    (addi x11 x0 1)
+    (slli x11 x11 25)
+    (addi x12 x0 3)
+    (addi x13 x0 2)
+    (add x15 x0 x0)
+    (addi x17 x0 SYS_MMAP)
+    (ecall)
+    (blt x10 x0 error-read-input)
+    (beq x10 x0 error-read-input)
+
+    (add x31 x0 x10)
+
+    ;; close(fd)
+    (add x10 x0 x14)
+    (addi x17 x0 SYS_CLOSE)
+    (ecall)
+
+    (add x10 x0 x31)
+    (subi x2 x2 8)
+    (sd x2 x10)
+
+    (jal x1 p1)
+
+    (ld x10 x2)
+    (addi x2 x2 8)
+
+    (jal x1 p2)
+
+    ;; exit(0)
+    (add x10 x0 x0)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+
+    p2
+        (subi x2 x2 16)
+        (sd x2 x10)
+        (sd (+ x2 8) x1)
+
+        (addi x10 x0 1)
+        (slli x10 x10 16)
+        (jal x1 malloc)
+        (add x20 x0 x10)
+        (add x21 x0 x10)
+
+        (ld x10 x2)
+        p2-read
+            (lb x5 x10)
+            (beq x5 x0 p2-after-read)
+            (add x11 x0 x0)
+            (addi x12 x0 5)
+            (jal x0 p2-card-to-int)
+        p2-read-num
+            (sd x20 x11)
+            (sd (+ x20 8) x12)
+            (addi x10 x10 1)
+            (jal x1 atou)
+            (sd (+ x20 16) x11)
+            (addi x20 x20 24)
+            (addi x10 x10 1)
+            (jal x0 p2-read)
+        p2-after-read
+            (add x5 x0 x21)
+        p2-sort
+            (addi x5 x5 24)
+            (beq x5 x20 p2-after-sort)
+            (add x6 x0 x5)
+            p2-sort-inner
+                (beq x6 x21 p2-sort)
+                (subi x6 x6 24)
+                (ld x30 (+ x6 32))
+                (ld x31 (+ x6 8))
+                (blt x31 x30 p2-sort)
+                (ld x28 (+ x6 24))
+                (ld x29 x6)
+                (bne x31 x30 p2-sort-swap)
+                (bge x28 x29 p2-sort)
+                p2-sort-swap
+                (sd x6 x28)
+                (sd (+ x6 24) x29)
+                (sd (+ x6 8) x30)
+                (sd (+ x6 32) x31)
+                (ld x30 (+ x6 16))
+                (ld x31 (+ x6 40))
+                (sd (+ x6 16) x31)
+                (sd (+ x6 40) x30)
+                (jal x0 p2-sort-inner)
+        p2-after-sort
+        (add x10 x0 x0)
+        (addi x5 x0 1)
+        (add x30 x0 x21)
+        p2-sum
+            (ld x6 (+ x30 16))
+            (addi x30 x30 24)
+            (mul x6 x5 x6)
+            (add x10 x10 x6)
+            (addi x5 x5 1)
+            (bne x30 x20 p2-sum)
+
+    p2-done
+        (jal x1 write-int)
+        (add x10 x0 x21)
+        (jal x1 free)
+        (ld x1 (+ x2 8))
+        (addi x2 x2 16)
+        (jalr x0 x1)
+
+    p2-card-to-int
+        (beq x12 x0 p2-classify-card)
+        (subi x12 x12 1)
+        (lb x5 x10)
+        (addi x10 x10 1)
+        (slli x11 x11 8)
+        (subi x6 x5 #'A')
+        (beq x6 x0 p2-card-to-int-A)
+        (subi x6 x5 #'K')
+        (beq x6 x0 p2-card-to-int-K)
+        (subi x6 x5 #'Q')
+        (beq x6 x0 p2-card-to-int-Q)
+        (subi x6 x5 #'J')
+        (beq x6 x0 p2-card-to-int-J)
+        (subi x6 x5 #'T')
+        (beq x6 x0 p2-card-to-int-T)
+        (subi x5 x5 #'0')
+        (add x11 x11 x5)
+        (jal x0 p2-card-to-int)
+    p2-card-to-int-A
+        (addi x11 x11 13)
+        (jal x0 p2-card-to-int)
+    p2-card-to-int-K
+        (addi x11 x11 12)
+        (jal x0 p2-card-to-int)
+    p2-card-to-int-Q
+        (addi x11 x11 11)
+        (jal x0 p2-card-to-int)
+    p2-card-to-int-J
+        (addi x11 x11 1)
+        (jal x0 p2-card-to-int)
+    p2-card-to-int-T
+        (addi x11 x11 10)
+        (jal x0 p2-card-to-int)
+
+    p2-classify-card
+        (sd x2 x10)
+        (addi x10 x0 16)
+        (jal x1 malloc)
+        (add x5 x0 x10)
+        (sd x5 x0)
+        (sd (+ x5 8) x0)
+
+        (add x6 x0 x11)
+    p2-classify-card-loop
+        (andi x7 x6 255)
+        (add x30 x5 x7)
+        (lb x31 x30)
+        (addi x31 x31 1)
+        (sb x30 x31)
+        (srai x6 x6 8)
+        (bne x6 x0 p2-classify-card-loop)
+
+        (addi x5 x5 1)
+        (addi x6 x5 13)
+        (add x26 x0 x0)
+    p2-classify-len
+        (beq x6 x5 p2-classify-len-after)
+        (lb x30 x6)
+        (subi x6 x6 1)
+        (beq x30 x0 p2-classify-len)
+        (addi x26 x26 1)
+        (jal x0 p2-classify-len)
+    p2-classify-len-after
+        (addi x6 x5 13)
+        (add x27 x0 x0)
+    p2-classify-max
+        (beq x6 x5 p2-classify-max-after)
+        (lb x30 x6)
+        (subi x6 x6 1)
+        (blt x30 x27 p2-classify-max)
+        (add x27 x0 x30)
+        (jal x0 p2-classify-max)
+    p2-classify-max-after
+        (lb x30 x5)
+        (add x27 x27 x30)
+        (addi x12 x0 6)
+        (beq x26 x0 p2-classify-done)
+        ;; 5
+        (subi x5 x26 1)
+        (addi x12 x0 6)
+        (beq x5 x0 p2-classify-done)
+        ;; 4/fh
+        (subi x5 x26 2)
+        (beq x5 x0 p2-classify-2)
+        ;; 3/2p
+        (subi x5 x26 3)
+        (beq x5 x0 p2-classify-3)
+        ;; 2
+        (subi x5 x26 4)
+        (addi x12 x0 1)
+        (beq x5 x0 p2-classify-done)
+        (add x12 x0 x0)
+    p2-classify-done
+        (jal x1 free)
+        (ld x10 x2)
+        (jal x0 p2-read-num)
+    p2-classify-2
+        (subi x5 x27 4)
+        (addi x12 x0 5)
+        (beq x5 x0 p2-classify-done)
+        (addi x12 x0 4)
+        (jal x0 p2-classify-done)
+    p2-classify-3
+        (subi x5 x27 3)
+        (addi x12 x0 3)
+        (beq x5 x0 p2-classify-done)
+        (addi x12 x0 2)
+        (jal x0 p2-classify-done)
+
+    p1
+        (subi x2 x2 16)
+        (sd x2 x10)
+        (sd (+ x2 8) x1)
+
+        (addi x10 x0 1)
+        (slli x10 x10 16)
+        (jal x1 malloc)
+        (add x20 x0 x10)
+        (add x21 x0 x10)
+
+        (ld x10 x2)
+        p1-read
+            (lb x5 x10)
+            (beq x5 x0 p1-after-read)
+            (add x11 x0 x0)
+            (addi x12 x0 5)
+            (jal x0 p1-card-to-int)
+        p1-read-num
+            (sd x20 x11)
+            (sd (+ x20 8) x12)
+            (addi x10 x10 1)
+            (jal x1 atou)
+            (sd (+ x20 16) x11)
+            (addi x20 x20 24)
+            (addi x10 x10 1)
+            (jal x0 p1-read)
+        p1-after-read
+            (add x5 x0 x21)
+        p1-sort
+            (addi x5 x5 24)
+            (beq x5 x20 p1-after-sort)
+            (add x6 x0 x5)
+            p1-sort-inner
+                (beq x6 x21 p1-sort)
+                (subi x6 x6 24)
+                (ld x30 (+ x6 32))
+                (ld x31 (+ x6 8))
+                (blt x31 x30 p1-sort)
+                (ld x28 (+ x6 24))
+                (ld x29 x6)
+                (bne x31 x30 p1-sort-swap)
+                (bge x28 x29 p1-sort)
+                p1-sort-swap
+                (sd x6 x28)
+                (sd (+ x6 24) x29)
+                (sd (+ x6 8) x30)
+                (sd (+ x6 32) x31)
+                (ld x30 (+ x6 16))
+                (ld x31 (+ x6 40))
+                (sd (+ x6 16) x31)
+                (sd (+ x6 40) x30)
+                (jal x0 p1-sort-inner)
+        p1-after-sort
+        (add x10 x0 x0)
+        (addi x5 x0 1)
+        (add x30 x0 x21)
+        p1-sum
+            (ld x6 (+ x30 16))
+            (addi x30 x30 24)
+            (mul x6 x5 x6)
+            (add x10 x10 x6)
+            (addi x5 x5 1)
+            (bne x30 x20 p1-sum)
+
+    p1-done
+        (jal x1 write-int)
+        (add x10 x0 x21)
+        (jal x1 free)
+        (ld x1 (+ x2 8))
+        (addi x2 x2 16)
+        (jalr x0 x1)
+
+    p1-card-to-int
+        (beq x12 x0 p1-classify-card)
+        (subi x12 x12 1)
+        (lb x5 x10)
+        (addi x10 x10 1)
+        (slli x11 x11 8)
+        (subi x6 x5 #'A')
+        (beq x6 x0 p1-card-to-int-A)
+        (subi x6 x5 #'K')
+        (beq x6 x0 p1-card-to-int-K)
+        (subi x6 x5 #'Q')
+        (beq x6 x0 p1-card-to-int-Q)
+        (subi x6 x5 #'J')
+        (beq x6 x0 p1-card-to-int-J)
+        (subi x6 x5 #'T')
+        (beq x6 x0 p1-card-to-int-T)
+        (subi x5 x5 #'1')
+        (add x11 x11 x5)
+        (jal x0 p1-card-to-int)
+    p1-card-to-int-A
+        (addi x11 x11 13)
+        (jal x0 p1-card-to-int)
+    p1-card-to-int-K
+        (addi x11 x11 12)
+        (jal x0 p1-card-to-int)
+    p1-card-to-int-Q
+        (addi x11 x11 11)
+        (jal x0 p1-card-to-int)
+    p1-card-to-int-J
+        (addi x11 x11 10)
+        (jal x0 p1-card-to-int)
+    p1-card-to-int-T
+        (addi x11 x11 9)
+        (jal x0 p1-card-to-int)
+
+    p1-classify-card
+        (sd x2 x10)
+        (addi x10 x0 16)
+        (jal x1 malloc)
+        (add x5 x0 x10)
+        (sd x5 x0)
+        (sd (+ x5 8) x0)
+
+        (add x6 x0 x11)
+    p1-classify-card-loop
+        (andi x7 x6 255)
+        (add x30 x5 x7)
+        (lb x31 x30)
+        (addi x31 x31 1)
+        (sb x30 x31)
+        (srai x6 x6 8)
+        (bne x6 x0 p1-classify-card-loop)
+
+        (addi x6 x5 14)
+        (add x26 x0 x0)
+    p1-classify-len
+        (beq x6 x5 p1-classify-len-after)
+        (lb x30 x6)
+        (subi x6 x6 1)
+        (beq x30 x0 p1-classify-len)
+        (addi x26 x26 1)
+        (jal x0 p1-classify-len)
+    p1-classify-len-after
+        (addi x6 x5 14)
+        (add x27 x0 x0)
+    p1-classify-max
+        (beq x6 x5 p1-classify-max-after)
+        (lb x30 x6)
+        (subi x6 x6 1)
+        (blt x30 x27 p1-classify-max)
+        (add x27 x0 x30)
+        (jal x0 p1-classify-max)
+    p1-classify-max-after
+        ;; 5
+        (subi x5 x26 1)
+        (addi x12 x0 6)
+        (beq x5 x0 p1-classify-done)
+        ;; 4/fh
+        (subi x5 x26 2)
+        (beq x5 x0 p1-classify-2)
+        ;; 3/2p
+        (subi x5 x26 3)
+        (beq x5 x0 p1-classify-3)
+        ;; 2
+        (subi x5 x26 4)
+        (addi x12 x0 1)
+        (beq x5 x0 p1-classify-done)
+        (add x12 x0 x0)
+    p1-classify-done
+        (jal x1 free)
+        (ld x10 x2)
+        (jal x0 p1-read-num)
+    p1-classify-2
+        (subi x5 x27 4)
+        (addi x12 x0 5)
+        (beq x5 x0 p1-classify-done)
+        (addi x12 x0 4)
+        (jal x0 p1-classify-done)
+    p1-classify-3
+        (subi x5 x27 3)
+        (addi x12 x0 3)
+        (beq x5 x0 p1-classify-done)
+        (addi x12 x0 2)
+        (jal x0 p1-classify-done)
+
+error-argc
+    (addi x10 x0 -1)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+error-open
+    (addi x10 x0 -2)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+error-read-input
+    (addi x10 x0 -3)
+    (addi x17 x0 SYS_EXIT)
+    (ecall)
+
+(include! "util.sasm")
+(include! "malloc.sasm")

@@ -3,9 +3,14 @@
 ;; OUTPUT:
 ;;  x10 - char* : incremented to character after this uint
 ;;  x11 - u64
+atoi
 atou
     (add x11 x0 x0)
     (addi x5 x0 10)
+    (addi x30 x0 1)
+    (lb x6 x10)
+    (subi x6 x6 #'-')
+    (beq x6 x0 atou-neg)
     atou-loop
         (lb x6 x10)
         (subi x7 x6 #':')
@@ -16,7 +21,12 @@ atou
         (mul x11 x11 x5)
         (add x11 x11 x7)
         (jal x0 atou-loop)
+    atou-neg
+        (subi x30 x0 1)
+        (addi x10 x10 1)
+        (jal x0 atou-loop)
     atou-done
+        (mul x11 x11 x30)
         (jalr x0 x1)
 
 ;; INPUT:
